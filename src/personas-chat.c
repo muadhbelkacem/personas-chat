@@ -23,13 +23,10 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
 {
     if (!log || !text)
         return;
-
     size_t prefix_len = strlen(prefix);
     fprintf(log, "%s", prefix);
-
     size_t line_len = prefix_len;
     const char *p = text;
-
     while (*p)
     {
         const char *start = p;
@@ -39,7 +36,6 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
             p++;
             count++;
         }
-
         if (*p == '\n')
         {
             fwrite(start, 1, p - start, log);
@@ -51,7 +47,6 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
             line_len = prefix_len;
             continue;
         }
-
         const char *end = p;
         if (*p && *p != '\n' && *p != '\0')
         {
@@ -61,19 +56,15 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
             if (back > start)
                 end = back;
         }
-
         fwrite(start, 1, end - start, log);
         fputc('\n', log);
-
         while (*end == ' ')
             end++;
         p = end;
-
         for (size_t i = 0; i < prefix_len; i++)
             fputc(' ', log);
         line_len = prefix_len;
     }
-
     fputc('\n', log);
     fputc('\n', log);
     fflush(log);
@@ -87,14 +78,12 @@ char *ask_ollama(const char *prompt)
         perror("pipe");
         return NULL;
     }
-
     pid_t pid = fork();
     if (pid < 0)
     {
         perror("fork");
         return NULL;
     }
-
     if (pid == 0)
     {
         dup2(inpipe[0], STDIN_FILENO);
@@ -107,42 +96,32 @@ char *ask_ollama(const char *prompt)
         perror("execlp");
         _exit(127);
     }
-
     close(inpipe[0]);
     close(outpipe[1]);
     write(inpipe[1], prompt, strlen(prompt));
     close(inpipe[1]);
-
     char buf[READ_BUF];
     ssize_t r;
     size_t total = 0;
     char *output = NULL;
-
     printf("%s", WHITE_B);
     fflush(stdout);
-
     while ((r = read(outpipe[0], buf, sizeof(buf))) > 0)
     {
         fwrite(buf, 1, r, stdout);
         fflush(stdout);
-
         output = realloc(output, total + r + 1);
         memcpy(output + total, buf, r);
         total += r;
     }
-
     printf("%s\n", RESET);
     fflush(stdout);
-
     if (output)
         output[total] = '\0';
-
     close(outpipe[0]);
     waitpid(pid, NULL, 0);
-
     if (!output)
         return strdup("(no response)");
-
     char *start = output;
     while (*start && strchr("\n\r \t", *start))
         start++;
@@ -154,9 +133,8 @@ char *ask_ollama(const char *prompt)
 
 int main(void)
 {
-    printf("%s%s🤖 AI Duo Chat (Endless Streaming)%s\n", CYAN_B, BOLD, RESET);
-    printf("%sTwo AI personas will keep talking to each other until you exit (Ctrl+C).%s\n", GRAY, RESET);
-    printf("Press %sCtrl+C%s to stop.\n\n", YELLOW_B, RESET);
+    printf("%s%s🤖 AI Duo Chat%s\n", CYAN_B, BOLD, RESET);
+    printf("%sYou can always exit anytime using Ctrl+C.%s\n\n", GRAY, RESET);
 
     char persona1[64] = "Muadh";
     char persona2[64] = "Ahmed";
@@ -164,22 +142,28 @@ int main(void)
     printf("%sPersona 1:%s %s\n", GREEN_B, RESET, persona1);
     printf("%sPersona 2:%s %s\n\n", BLUE_B, RESET, persona2);
 
-    char input[MAX_TEXT];
-    printf("%sEnter the initial message to start the conversation:%s\n> ", YELLOW_B, RESET);
+    int ask_every_time = 1;
+    char choice[8];
+    printf("%sDo you want me to ask after every reply if you want to exit? (Y/n): %s", YELLOW_B, RESET);
     fflush(stdout);
 
+    if (fgets(choice, sizeof(choice), stdin))
+    {
+        if (choice[0] == 'n' || choice[0] == 'N')
+            ask_every_time = 0;
+    }
+
+    char input[MAX_TEXT];
+    printf("\n%sEnter the initial message to start the conversation:%s\n> ", YELLOW_B, RESET);
+    fflush(stdout);
     if (!fgets(input, sizeof(input), stdin))
     {
         fprintf(stderr, "Error reading input.\n");
         return 1;
     }
-
     input[strcspn(input, "\n")] = 0;
-
     if (strlen(input) == 0)
-    {
         strcpy(input, "Let's start a deep and continuous discussion — no greetings needed.");
-    }
 
     FILE *log = fopen("conversation.txt", "a");
     if (!log)
@@ -188,8 +172,7 @@ int main(void)
         return 1;
     }
 
-    fprintf(log, "Persona 1: %s\n", persona1);
-    fprintf(log, "Persona 2: %s\n\n", persona2);
+    fprintf(log, "Persona 1: %s\nPersona 2: %s\n\n", persona1, persona2);
     fflush(log);
 
     char *msg = strdup(input);
@@ -204,22 +187,36 @@ int main(void)
     size_t convo_len = asprintf(&conversation, "%s: %s\n", persona1, msg);
 
     int i = 0;
+    char exit_choice[8];
+
     while (1)
     {
+        if (i > 0 && ask_every_time)
+        {
+            printf("%sDo you want to exit? (Y/n): %s", YELLOW_B, RESET);
+            fflush(stdout);
+            if (fgets(exit_choice, sizeof(exit_choice), stdin))
+            {
+                exit_choice[strcspn(exit_choice, "\n")] = 0;
+                if (exit_choice[0] == 'y' || exit_choice[0] == 'Y' || exit_choice[0] == '\0')
+                {
+                    printf("%sExiting conversation...%s\n", DIM, RESET);
+                    break;
+                }
+            }
+        }
+
         const char *speaker = (i % 2 == 0) ? persona2 : persona1;
         const char *listener = (i % 2 == 0) ? persona1 : persona2;
 
-        if (i % 2 == 0)
-            printf("%s%s%s:\n", BOLD, BLUE_B, speaker);
-        else
-            printf("%s%s%s:\n", BOLD, GREEN_B, speaker);
+        printf("%s%s%s:%s\n", BOLD, (i % 2 == 0) ? BLUE_B : GREEN_B, speaker, RESET);
         fflush(stdout);
 
         char prompt[MAX_TEXT];
         snprintf(prompt, sizeof(prompt),
                  "You are %s. Continue this ongoing discussion with %s. "
-                 "Do not greet, introduce yourself, or repeat the same ideas. "
-                 "Stay natural and respond as if mid-conversation.\n\n"
+                 "Do not greet, introduce yourself, or repeat ideas. "
+                 "Stay natural and continue mid-discussion.\n\n"
                  "Conversation so far:\n%s\n",
                  speaker, listener, conversation);
 
