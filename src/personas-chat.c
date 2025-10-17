@@ -164,6 +164,23 @@ int main(void)
     printf("%sPersona 1:%s %s\n", GREEN_B, RESET, persona1);
     printf("%sPersona 2:%s %s\n\n", BLUE_B, RESET, persona2);
 
+    char input[MAX_TEXT];
+    printf("%sEnter the initial message to start the conversation:%s\n> ", YELLOW_B, RESET);
+    fflush(stdout);
+
+    if (!fgets(input, sizeof(input), stdin))
+    {
+        fprintf(stderr, "Error reading input.\n");
+        return 1;
+    }
+
+    input[strcspn(input, "\n")] = 0;
+
+    if (strlen(input) == 0)
+    {
+        strcpy(input, "Let's start a deep and continuous discussion — no greetings needed.");
+    }
+
     FILE *log = fopen("conversation.txt", "a");
     if (!log)
     {
@@ -175,7 +192,7 @@ int main(void)
     fprintf(log, "Persona 2: %s\n\n", persona2);
     fflush(log);
 
-    char *msg = strdup("How are you.");
+    char *msg = strdup(input);
     printf("%s%s%s:%s\n", BOLD, GREEN_B, persona1, RESET);
     printf("%s%s%s\n\n", WHITE_B, msg, RESET);
 
@@ -183,12 +200,8 @@ int main(void)
     snprintf(prefix, sizeof(prefix), "%s: ", persona1);
     write_wrapped(log, prefix, msg);
 
-    char *conversation = strdup("");
-    size_t convo_len = 0;
-
-    convo_len = asprintf(&conversation,
-                         "%s: %s\n",
-                         persona1, msg);
+    char *conversation = NULL;
+    size_t convo_len = asprintf(&conversation, "%s: %s\n", persona1, msg);
 
     int i = 0;
     while (1)
@@ -205,8 +218,9 @@ int main(void)
         char prompt[MAX_TEXT];
         snprintf(prompt, sizeof(prompt),
                  "You are %s. Continue this ongoing discussion with %s. "
-                 "Do not greet or introduce yourself — just reply naturally, "
-                 "as if you're already mid-conversation.\n\nConversation so far:\n%s\n",
+                 "Do not greet, introduce yourself, or repeat the same ideas. "
+                 "Stay natural and respond as if mid-conversation.\n\n"
+                 "Conversation so far:\n%s\n",
                  speaker, listener, conversation);
 
         free(msg);
