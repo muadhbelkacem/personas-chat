@@ -7,7 +7,7 @@
 
 #define MAX_TEXT 4096
 #define READ_BUF 4096
-#define WRAP_WIDTH 80 // maximum characters per line in log file
+#define WRAP_WIDTH 80
 
 #define RESET "\033[0m"
 #define BOLD "\033[1m"
@@ -19,7 +19,6 @@
 #define WHITE_B "\033[97m"
 #define GRAY "\033[90m"
 
-// --- Helper: Wrap text nicely when writing to log file ---
 void write_wrapped(FILE *log, const char *prefix, const char *text)
 {
     if (!log || !text)
@@ -33,7 +32,6 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
 
     while (*p)
     {
-        // find how many chars fit in the remaining space
         const char *start = p;
         size_t count = 0;
         while (*p && *p != '\n' && count < WRAP_WIDTH - line_len)
@@ -42,7 +40,6 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
             count++;
         }
 
-        // if we reached end of line or newline
         if (*p == '\n')
         {
             fwrite(start, 1, p - start, log);
@@ -50,12 +47,11 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
             line_len = 0;
             p++;
             for (size_t i = 0; i < prefix_len; i++)
-                fputc(' ', log); // indent continuation
+                fputc(' ', log);
             line_len = prefix_len;
             continue;
         }
 
-        // if line too long, backtrack to last space
         const char *end = p;
         if (*p && *p != '\n' && *p != '\0')
         {
@@ -69,12 +65,10 @@ void write_wrapped(FILE *log, const char *prefix, const char *text)
         fwrite(start, 1, end - start, log);
         fputc('\n', log);
 
-        // skip spaces
         while (*end == ' ')
             end++;
         p = end;
 
-        // indent continuation
         for (size_t i = 0; i < prefix_len; i++)
             fputc(' ', log);
         line_len = prefix_len;
@@ -181,13 +175,20 @@ int main(void)
     fprintf(log, "Persona 2: %s\n\n", persona2);
     fflush(log);
 
-    char *msg = strdup("Hello, how are you today?");
+    char *msg = strdup("How are you.");
     printf("%s%s%s:%s\n", BOLD, GREEN_B, persona1, RESET);
     printf("%s%s%s\n\n", WHITE_B, msg, RESET);
 
     char prefix[128];
     snprintf(prefix, sizeof(prefix), "%s: ", persona1);
     write_wrapped(log, prefix, msg);
+
+    char *conversation = strdup("");
+    size_t convo_len = 0;
+
+    convo_len = asprintf(&conversation,
+                         "%s: %s\n",
+                         persona1, msg);
 
     int i = 0;
     while (1)
@@ -203,8 +204,10 @@ int main(void)
 
         char prompt[MAX_TEXT];
         snprintf(prompt, sizeof(prompt),
-                 "You are %s. Respond naturally to the following message from %s:\n\n\"%s\"\n",
-                 speaker, listener, msg);
+                 "You are %s. Continue this ongoing discussion with %s. "
+                 "Do not greet or introduce yourself — just reply naturally, "
+                 "as if you're already mid-conversation.\n\nConversation so far:\n%s\n",
+                 speaker, listener, conversation);
 
         free(msg);
         msg = ask_ollama(prompt);
@@ -212,11 +215,16 @@ int main(void)
         snprintf(prefix, sizeof(prefix), "%s: ", speaker);
         write_wrapped(log, prefix, msg);
 
+        size_t new_len = convo_len + strlen(speaker) + strlen(msg) + 4;
+        conversation = realloc(conversation, new_len);
+        convo_len += sprintf(conversation + convo_len, "%s: %s\n", speaker, msg);
+
         fflush(stdout);
         i++;
     }
 
     free(msg);
+    free(conversation);
     fclose(log);
     printf("%sEnd of conversation.%s\n", DIM, RESET);
     return 0;
